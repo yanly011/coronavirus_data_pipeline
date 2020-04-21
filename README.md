@@ -19,9 +19,9 @@ The outcome is a set of tables that make easier complex queries and at the same 
 ## Tooling
 The tools utilised on this project are the same as we have been learning during the course of this Nanodegree.
 
-- `Amazon S3` for File Storage
-- `Amazon Redshift` for Data Storage
-- `Apache Airflow` as an Orchestration Tool
+- `Amazon S3` for File Storage: S3 can be used to store the original data of coronavirus, and the ETL pipeline will connect to the bucket to load the data.
+- `Amazon Redshift` for Data Storage: Redshift is a cheap and powerful data warehouse service of AWS. It is suitable for OLAP. For this project, we choose Redshift to store the cleaned data and make analysers can get data from different dimensions.
+- `Apache Airflow` as an Orchestration Tool: Airflow is a very good tool to organize and monitor a data pipeline.
 
 Those tools are widely utilised and considered industry standards. The community is massive and the tools provide support to several features.
 

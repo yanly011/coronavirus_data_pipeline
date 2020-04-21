@@ -30,7 +30,7 @@ Apache Airflow, in special, gives freedom to create new plugins and adapt it to 
 ## Data Model
 Here, we can assume analysis requirements of coronavirus cases.  
 First, we needs a fact table to store information of each case and another one for store the time series cases number to analysis the trend of coronavirus in different regions.
-As an analyser, the cases need to be analysis from the dimension of time period(month, day, etc.), and the location (country, city, etc.). Sometimes the source where the cases' information is come from is another dimension for data analysis. It is also very convenient if we want to add some addtional information about these dimension, for example, we can add latitude and longtitude of an region in the dimension table.
+As an analyser, the cases need to be analysis from the dimension of time period(month, day, etc.), and the location (country, city, etc.). Sometimes the source where the cases' information is come from is another dimension for data analysis. It is also very convenient if we want to add some addtional information about these dimension, for example, we can add latitude and longtitude of an region in the dimension table. We also need to establish a table to store patient information because there may many new features of patient need add to the data warehouse in future. 
 The final data model include six tables, four dimensions and two facts.
 
 ![Data Model](https://audacity-capstone-luke.s3-ap-southeast-2.amazonaws.com/ER.jpg)

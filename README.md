@@ -134,12 +134,52 @@ The Data pipeline is defined by the file of `/dags/etl.py`, including 11 steps:
 
 ![DAG](https://audacity-capstone-luke.s3-ap-southeast-2.amazonaws.com/pipeline+structure.png)
 ### Data Clean
-The first step is clean the original csv data. One problem of original data is the data formation is irregular and cannot identified as DATA type in Redshift. Another one is some values in the columns of data type are recorded as a string of 'NA' to represent null value. It is also need to be replaced.The file of `/plugins/operators/clean_csv_file.py` 
+The first step is clean the original csv data. One problem of original data is the data formation is irregular and cannot identified as DATA type in Redshift. Another one is some values in the columns of data type are recorded as a string of 'NA' to represent null value. It is also need to be replaced. The file of `/plugins/operators/clean_csv_file.py` defines the logic of data clean:
+```python
+    def execute(self, context):
+        self.log.info('Clean csv file starts')
+        aws_hook = AwsHook(self.aws_credentials_id)
+        credentials = aws_hook.get_credentials() 
+        rendered_key = self.s3_key.format(**context)
+        s3_path = "s3://{}/{}".format(self.s3_bucket, rendered_key)
+        self.log.info("Download data from S3: " + str(s3_path))
+        s3 = boto3.client('s3', aws_access_key_id=credentials.access_key, aws_secret_access_key=credentials.secret_key)
+        obj = s3.get_object(Bucket=self.s3_bucket, Key=self.s3_key)
+        df = pd.read_csv(io.BytesIO(obj['Body'].read()), index_col=False)
+        df = df.replace(to_replace ="NA",  value ="")
+        df = df.fillna(value="")
+        for col in self.datecols:
+            df[col] = df[col].apply(dateformatter) 
+        
+        csv_buffer = StringIO()
+        df.to_csv(csv_buffer, index=False)
+        s3_resource = boto3.resource('s3', aws_access_key_id=credentials.access_key, aws_secret_access_key=credentials.secret_key)
+        s3_resource.Object(self.s3_bucket, rendered_key).put(Body=csv_buffer.getvalue())
+```
 ### Data Ingestion
 The first step is read the data from S3 into Redshift. This is done through the `/plugins/operators/S3ToRedshiftOperator`. 
-
-
-
+```python
+     def execute(self, context):
+        self.log.info('StageToRedshiftOperator starts')
+        aws_hook = AwsHook(self.aws_credentials_id)
+        credentials = aws_hook.get_credentials() 
+        redshift = PostgresHook(postgres_conn_id=self.redshift_conn_id)
+        
+        self.log.info("Clearing data from destination Redshift table")
+        redshift.run("DELETE FROM {}".format(self.table))
+        
+        self.log.info("Copying data from S3 to Redshift")
+        rendered_key = self.s3_key.format(**context)
+        s3_path = "s3://{}/{}".format(self.s3_bucket, rendered_key)
+        formatted_sql = StageToRedshiftOperator.copy_sql.format(
+            self.table,
+            s3_path,
+            credentials.access_key,
+            credentials.secret_key,
+            self.region
+        )
+        redshift.run(formatted_sql)
+```
 That SubDag is dynamically generated according to the configuration file `/dags/configuration/copy_from_s3_to_redshift.py`. It means that if more tasks are needed then all that is required is to add new details to that file.
 
 ### Data Processing
@@ -153,22 +193,22 @@ One example of sql statement is following:
 CREATE TABLE IF NOT EXISTS public.fact_cases (
     caseid         varchar(256) NOT NULL,
     caseincountry  INT8,
-	symptoms       varchar(512),
+    symptoms       varchar(512),
     symptonsonsite DATE,
     reportdate     DATE,
-	hospvisitdate  DATE,
-	exposurestart  DATE,
+    hospvisitdate  DATE,
+    exposurestart  DATE,
     exposureend    DATE,
-	visitingwuhan  varchar(10),
+    visitingwuhan  varchar(10),
     fromwuhan      varchar(10),
     death          varchar(10),
     recovered      varchar(10),
     summary        varchar(65535),
-	sourceid       varchar(256)
+    sourceid       varchar(256)
 );
 ```
 ```python
-fact_data_table_insert = ("""
+    fact_data_table_insert = ("""
         SELECT
                 datastage.sno,
                 TO_DATE(datastage.observationdate, 'DD/MM/YYYY'),
@@ -183,7 +223,18 @@ fact_data_table_insert = ("""
     """)
 ```
 ### Data Quality Check
-The file of `/plugins/operators/data_quality.py` is responsible for data quality check. It will check how many records in the fact tables and dimension tables in Redshift database. 
+The file of `/plugins/operators/data_quality.py` is responsible for data quality check. It will check how many records in the fact tables and dimension tables in Redshift database:
+```python
+    def execute(self, context):
+        self.log.info('DataQualityOperator starts')
+        redshift_hook = PostgresHook("redshift")
+        for table in self.tables:
+            records = redshift_hook.get_records(f"SELECT COUNT(*) FROM {table}")
+            if len(records) < 1 or len(records[0]) < 1:
+                raise ValueError(f"Data quality check failed. {table} returned no results")
+            num_records = records[0][0]
+            self.log.info(f"Data quality on table {table} check passed with {records[0][0]} records")
+```
 
 ## Running the Project
 It's assumed that there is an Airflow instance up and running.
